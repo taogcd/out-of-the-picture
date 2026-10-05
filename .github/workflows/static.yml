@@ -1,0 +1,56 @@
+name: Publish anatomical archive
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Check out website code
+        uses: actions/checkout@v4
+      - name: Restore verified collection images and source PDF
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --location --retry 3 'https://github.com/taogcd/out-of-the-picture/releases/download/v1.0.0/Out_of_the_Picture_1.0.zip' --output /tmp/archive.zip
+          echo '23a232e8c9cd97407e8ead33c7693ff4ebfcf7946ebd001f833dcdeab2897462  /tmp/archive.zip' | sha256sum --check
+          unzip -q /tmp/archive.zip -d /tmp/archive-source
+          mkdir -p /tmp/archive-site
+          cp -a /tmp/archive-source/out-of-the-picture/. /tmp/archive-site/
+      - name: Apply the current website code and check it
+        shell: bash
+        run: |
+          set -euo pipefail
+          for file in index.html app.js data.js style.css mobile.css comparison-index.csv .nojekyll; do
+            if [ -f "$file" ]; then cp "$file" /tmp/archive-site/; fi
+          done
+          for folder in assets reference; do
+            if [ -d "$folder" ]; then cp -a "$folder/." "/tmp/archive-site/$folder/"; fi
+          done
+          node --check /tmp/archive-site/app.js
+          node --check /tmp/archive-site/data.js
+          test -s /tmp/archive-site/reference/Geminus_Vesalius_39_comparisons.pdf
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+      - name: Upload site
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: /tmp/archive-site
+      - name: Publish site
+        id: deployment
+        uses: actions/deploy-pages@v4
