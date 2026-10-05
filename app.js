@@ -1,6 +1,7 @@
 const RECORDS=PLATES.map(p=>({...p,id:p.number,nypl:p.g.nyplId,category:p.number<=2?'Skeletons':p.number<=16||p.number===18||p.number===19?'Muscles':p.number===17?'Figures':p.number<=24?'Vessels':p.number<=28?'Nerves':p.number<=34?'Organs':'Brain & instruments'}));
 const $=id=>document.getElementById(id), esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const pad=n=>String(n).padStart(2,'0'), SOURCE_BOOK='https://doi.org/10.3931/e-rara-20094';
+let clearOverlay=false,exportingOverlay=false;
 let overview=true,gCopy='pdf',mobileBoth=false;
 let boardScale=1,boardZoom=1;
 let current=1,vIndex=0,view='catalogue',listMode=false,ink=true,overlay=false,cropMode=false,activeSide='v',selected=null,drawToken=0,toastTimer;
@@ -42,7 +43,7 @@ $('zoomIn').onclick=()=>changeZoom(.5);$('zoomOut').onclick=()=>changeZoom(-.5);
 $('backCatalogue').onclick=()=>setView('catalogue');
 $('prev').onclick=()=>openRecord(current===1?39:current-1);
 $('next').onclick=()=>openRecord(current===39?1:current+1);
-function setOverlay(on){overlay=on;if(on){toggleCrop(false);focusSide('v');}$('pair').classList.toggle('overlay',on);$('sideMode').classList.toggle('active',!on);$('overlayMode').classList.toggle('active',on);$('overlayMode').setAttribute('aria-pressed',String(on));$('opacityWrap').classList.toggle('show',on);$('imgG').style.opacity=on?Number($('opacity').value)/100:1;syncMobileCompare();updateCompareHelp();}
+function setOverlay(on){overlay=on;if(on){toggleCrop(false);focusSide('v');}$('pair').classList.toggle('overlay',on);$('sideMode').classList.toggle('active',!on);$('overlayMode').classList.toggle('active',on);$('overlayMode').setAttribute('aria-pressed',String(on));$('opacityWrap').classList.toggle('show',on);$('imgG').style.opacity=on?Number($('opacity').value)/100:1;syncOverlayTools();syncMobileCompare();updateCompareHelp();}
 function updateCompareHelp(){
  $('compareHelp').textContent=cropMode?'Draw a rectangle on the image to cut a fragment. Tap Select fragment again to cancel.':overview?'Every source page in this group is shown below. Select a page to inspect it with Geminus, zoom or extract a fragment.':overlay?'Overlay is aligned to page centres, not physical scale. Use Fit to reset. Switch back to select a fragment.':window.innerWidth<=700?'Choose Vesalius, Geminus or Both. Use + to enlarge, then drag to pan; Fit restores scrolling.':'Drag to pan; use + / − to inspect. Select fragment, then draw a rectangle on either source.';
 }
@@ -55,11 +56,77 @@ document.querySelectorAll('[data-mobile-side]').forEach(b=>b.onclick=()=>{mobile
 $('allMode').onclick=()=>setOverview(true);$('sideMode').onclick=()=>{setOverview(false);setOverlay(false);};$('overlayMode').onclick=()=>{setOverview(false);setOverlay(true);};$('opacity').oninput=()=>{$('imgG').style.opacity=Number($('opacity').value)/100;};
 function toggleCrop(on){if(on&&overview)setOverview(false);if(on&&overlay)setOverlay(false);cropMode=on;if(on)resetCamera();$('cropButton').classList.toggle('active',on);$('cropButton').setAttribute('aria-pressed',String(on));['v','g'].forEach(s=>$('frame'+s.toUpperCase()).classList.toggle('cropping',on));applyCameras();updateCompareHelp();}
 $('cropButton').onclick=()=>toggleCrop(!cropMode);
+
+// Export the same fitted, transformed source images that are visible in Overlay.
+function overlayImagesReady(){
+ return ['v','g'].every(side=>{const img=$('img'+side.toUpperCase());return images[side]&&img.complete&&img.naturalWidth>0&&img.getAttribute('src')===images[side].url;});
+}
+function syncOverlayTools(){
+ $('overlayTools').hidden=!overlay||overview;
+ $('pair').classList.toggle('clear-overlay',clearOverlay);
+ for(const [id,on] of [['overlayGrid',!clearOverlay],['overlayClear',clearOverlay]]){$(id).classList.toggle('active',on);$(id).setAttribute('aria-pressed',String(on));}
+ $('overlayExportHint').textContent=clearOverlay?'Transparent canvas · no grid. Paper in the source scans stays visible.':'Export this image area with its current blend, zoom and position.';
+ $('exportOverlay').disabled=exportingOverlay||!overlay||overview||!overlayImagesReady();
+}
+function setOverlayBackground(clear){clearOverlay=clear;syncOverlayTools();}
+$('overlayGrid').onclick=()=>setOverlayBackground(false);
+$('overlayClear').onclick=()=>setOverlayBackground(true);
+function overlayImageRect(img,cam,width,height){
+ const fit=Math.min(width/img.naturalWidth,height/img.naturalHeight),w=img.naturalWidth*fit*cam.z,h=img.naturalHeight*fit*cam.z;
+ return {x:(width-w)/2+cam.x,y:(height-h)/2+cam.y,w,h};
+}
+function grayscaleSource(img){
+ const canvas=document.createElement('canvas');canvas.width=img.naturalWidth;canvas.height=img.naturalHeight;
+ const ctx=canvas.getContext('2d');ctx.drawImage(img,0,0);
+ const pixels=ctx.getImageData(0,0,canvas.width,canvas.height),p=pixels.data;
+ // The luminance weights match CSS grayscale(1), including coloured source copies.
+ for(let i=0;i<p.length;i+=4){const gray=Math.round(.2126*p[i]+.7152*p[i+1]+.0722*p[i+2]);p[i]=p[i+1]=p[i+2]=gray;}
+ ctx.putImageData(pixels,0,0);return canvas;
+}
+function drawOverlayCanvas(){
+ const frame=$('frameV'),width=frame.clientWidth,height=frame.clientHeight;
+ if(!width||!height||!overlayImagesReady())throw new Error('Wait for both source images to load.');
+ const layers=['v','g'].map(side=>{const img=$('img'+side.toUpperCase());return {img,rect:overlayImageRect(img,cameras[side],width,height),opacity:side==='g'?Number($('opacity').value)/100:1};});
+ const nativeScale=Math.max(...layers.filter(l=>l.opacity>0).map(l=>l.img.naturalWidth/l.rect.w));
+ // Keep source detail without producing an excessively large canvas on phones.
+ const scale=Math.min(Math.max(1,nativeScale),4096/Math.max(width,height));
+ const canvas=document.createElement('canvas');canvas.width=Math.max(1,Math.round(width*scale));canvas.height=Math.max(1,Math.round(height*scale));
+ const ctx=canvas.getContext('2d');ctx.scale(canvas.width/width,canvas.height/height);
+ if(!clearOverlay){
+  ctx.fillStyle='#fff';ctx.fillRect(0,0,width,height);
+  ctx.fillStyle=getComputedStyle(document.documentElement).getPropertyValue('--grid').trim()||'rgba(49,87,190,.09)';
+  for(let x=0;x<width;x+=24)ctx.fillRect(x,0,1,height);
+  for(let y=0;y<height;y+=24)ctx.fillRect(0,y,width,1);
+ }
+ ctx.imageSmoothingEnabled=true;ctx.imageSmoothingQuality='high';
+ for(const layer of layers){
+  if(!layer.opacity)continue;
+  ctx.globalCompositeOperation='multiply';ctx.globalAlpha=layer.opacity;
+  const source=ink?grayscaleSource(layer.img):layer.img,r=layer.rect;
+  ctx.drawImage(source,r.x,r.y,r.w,r.h);
+  if(source!==layer.img){source.width=1;source.height=1;}
+ }
+ return canvas;
+}
+$('exportOverlay').onclick=async()=>{
+ if(exportingOverlay||!overlay||overview||!overlayImagesReady())return;
+ exportingOverlay=true;syncOverlayTools();$('exportOverlay').textContent='Preparing PNG…';
+ try{
+  const r=record(),scan=r.v[vIndex].scan,copy=gSource(r).institution.includes('Wellcome')?'Wellcome':'NYPL',blend=$('opacity').value,background=clearOverlay?'clear':'grid';
+  const canvas=drawOverlayCanvas(),name=`Out_of_the_Picture_${pad(r.id)}_V${scan}_${copy}_blend${blend}_${background}.png`;
+  const blob=await new Promise((resolve,reject)=>canvas.toBlob(b=>b?resolve(b):reject(new Error('PNG export failed. Please try again.')),'image/png'));
+  const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);
+  toast(`PNG exported · ${canvas.width} × ${canvas.height} px${background==='clear'?' · transparent canvas':''}.`);
+  canvas.width=canvas.height=1;
+ }catch(error){toast(error.message||'Could not export this image. Please try again.');}
+ finally{exportingOverlay=false;$('exportOverlay').textContent='Export PNG';syncOverlayTools();}
+};
+
 function bindImage(side,source,token){
- if(token!==drawToken)return;images[side]=source;const cap=side.toUpperCase(),img=$('img'+cap),state=$('state'+cap),link=$('original'+cap);
+ if(token!==drawToken)return;images[side]=source;$('exportOverlay').disabled=true;const cap=side.toUpperCase(),img=$('img'+cap),state=$('state'+cap),link=$('original'+cap);
 
  if(!source){img.removeAttribute('src');state.textContent='This collection image could not load. Open the source catalogue, or retry by selecting another record.';link.href=record().v[vIndex]?.work==='Epitome'?'https://iiif.wellcomecollection.org/presentation/b33544189':SOURCE_BOOK;return;}
- state.textContent='Loading collection image…';link.href=source.original;img.onload=()=>{if(token===drawToken){state.textContent='';renderRegions();}};img.onerror=()=>{if(token===drawToken)state.textContent='The collection image is temporarily unavailable. Use Original scan to open it directly.';};img.src=source.url;img.alt=source.author+', '+source.work+', '+source.year+', '+source.page;
+ state.textContent='Loading collection image…';link.href=source.original;img.onload=()=>{if(token===drawToken){state.textContent='';renderRegions();syncOverlayTools();}};img.onerror=()=>{if(token===drawToken)state.textContent='The collection image is temporarily unavailable. Use Original scan to open it directly.';};img.src=source.url;syncOverlayTools();img.alt=source.author+', '+source.work+', '+source.year+', '+source.page;
 }
 async function renderCompare(){
  const token=++drawToken,r=record();toggleCrop(false);renderStudy(r);renderOverview(r);updateMode();$('jumpRecord').value=String(current);renderCopyChoice(r);$('compareIndex').textContent='Record '+pad(r.id)+' / 39 · '+r.change;$('compareTitle').textContent=r.title;$('observation').textContent=r.note;$('pending').textContent=r.pending?'Detail under review — '+r.pending:'';
@@ -186,7 +253,7 @@ function renderStudy(r){$('study').hidden=!r.detail;if(!r.detail)return;$('study
 }
 $('locateStudy').onclick=()=>{const r=record();vIndex=r.detailSource;gCopy='display';setOverview(false);setOverlay(false);resetCamera();regionTargets={record:current};['v','g'].forEach(s=>{const [x,y,w,h]=r[s+'box'];regionTargets[s]={box:{x,y,w,h},pageIndex:s==='v'?vIndex:0};});renderCompare();document.querySelector('.comptitle').scrollIntoView({block:'start'});};
 function renderRegions(){['v','g'].forEach(side=>{const frame=$('frame'+side.toUpperCase());frame.querySelector('.source-region')?.remove();const target=regionTargets?.[side];if(!target||regionTargets.record!==current||(side==='v'&&target.pageIndex!==vIndex))return;const b=imageBounds(side);if(!b)return;const c=target.box,cam=cameras[side],el=document.createElement('div');el.className='source-region';el.setAttribute('aria-label','Selected fragment location');el.style.left=((b.left+c.x*b.w-frame.clientWidth/2)*cam.z+frame.clientWidth/2+cam.x)+'px';el.style.top=((b.top+c.y*b.h-frame.clientHeight/2)*cam.z+frame.clientHeight/2+cam.y)+'px';el.style.width=c.w*b.w*cam.z+'px';el.style.height=c.h*b.h*cam.z+'px';frame.appendChild(el);});}
-window.addEventListener('resize',()=>{syncMobileCompare();updateCompareHelp();renderRegions();updateBoardScale();if($('image-dialog').open)applyDetailZoom();});
+window.addEventListener('resize',()=>{syncMobileCompare();syncOverlayTools();updateCompareHelp();renderRegions();updateBoardScale();if($('image-dialog').open)applyDetailZoom();});
 document.addEventListener('keydown',e=>{if(e.key==='Escape'&&cropMode)toggleCrop(false)});
 
 

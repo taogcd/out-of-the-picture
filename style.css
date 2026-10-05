@@ -11,3 +11,15 @@
 @media(max-width:400px){.card .catalogue-pair .thumb{height:225px}.source-page-image{height:200px}.overview-g-image{height:410px}}
 
 .pdf-reference{display:inline-block;text-decoration:underline;text-underline-offset:3px}
+
+/* Optional clear canvas and export controls, only shown in Overlay. */
+.overlay-tools[hidden]{display:none!important}
+.overlay-tools{display:flex;align-items:center;gap:16px;flex-wrap:wrap;border-bottom:1px solid var(--line);padding:14px 0}
+.overlay-background{display:flex;align-items:center;gap:12px}
+.overlay-options{display:flex}
+.overlay-options button+button{border-left:0}
+.overlay-tools p{margin:0;flex:1;min-width:180px;color:var(--muted);line-height:1.6}
+#exportOverlay{margin-left:auto;white-space:nowrap;border-color:var(--blue);color:var(--blue)}
+.pair.overlay.clear-overlay .frame{background:none;border-color:transparent}
+.pair.overlay.clear-overlay .source-region{display:none}
+@media(max-width:700px){.overlay-tools{gap:12px}.overlay-background{width:100%;justify-content:space-between}.overlay-options button{min-width:80px;min-height:44px}.overlay-tools p{flex-basis:100%;font-size:13px}#exportOverlay{width:100%;min-height:44px}}
