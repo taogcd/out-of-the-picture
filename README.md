@@ -110,8 +110,8 @@ This draft extends the previously published Site source commit
 `b68f8e297e468c2547dc5bd0015f5384aa684d0e`.
 
 All 39 groups and their 107 source-page connections were checked against the
-supplied comparison PDF. Each group displays all its source pages and links to
-the corresponding PDF page. Existing archive image assets are unchanged; the
+supplied comparison PDF. Each group displays all its source pages. Per-group PDF links have been removed;
+the complete reference remains available under About & sources. Existing archive image assets are unchanged; the
 39 added NYPL JPEGs are byte-for-byte copies of the reference source files.
 No AI-generated imagery is used.
 
@@ -121,8 +121,9 @@ all groups 01–16 appear under Landscape / setting. Filters retain record numbe
 and have a prominent reset control. The initial catalogue shows all 39 groups.
 
 Checks passed for asset integrity, all group/source coverage, source switching,
-PDF page links, and atlas provenance using DOM interaction simulations. Browser
-visual review is still pending. Mobile pointer simulations passed at widths of
+and atlas provenance using DOM interaction simulations. The live GitHub Pages
+catalogue, multi-page comparison, copy switching and atlas provenance were also
+checked in a desktop browser. Mobile pointer simulations passed at widths of
 320, 375, 390, 430 and 700 pixels, covering scrolling, crop coordinates, image
 switching, board zoom, scaled dragging/resizing and orientation changes. These
 are simulated interactions, not real-device browser testing. GitHub Pages publishes this edition from the repository. The earlier Sites edition is separate.
