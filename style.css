@@ -23,3 +23,7 @@
 .pair.overlay.clear-overlay .frame{background:none;border-color:transparent}
 .pair.overlay.clear-overlay .source-region{display:none}
 @media(max-width:700px){.overlay-tools{gap:12px}.overlay-background{width:100%;justify-content:space-between}.overlay-options button{min-width:80px;min-height:44px}.overlay-tools p{flex-basis:100%;font-size:13px}#exportOverlay{width:100%;min-height:44px}}
+
+#overlaySave[hidden]{display:none!important}
+#overlaySave{display:inline-flex;align-items:center;justify-content:center;padding:8px 14px;background:var(--blue);color:#fff;border:1px solid var(--blue);text-decoration:none;white-space:nowrap}
+@media(max-width:700px){#overlaySave{width:100%;min-height:44px}}

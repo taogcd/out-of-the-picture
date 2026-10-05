@@ -17,8 +17,8 @@ Geminus (1545) and 105 distinct source scans from works by Andreas Vesalius
   Inspect any source in a pair or adjustable overlay, zoom, and examine six
   selected study pairs. Full observations and unresolved-source notes remain
   attached to all 39 groups.
-- **Overlay export:** choose Grid or Clear, then Export PNG to save the visible
-  composition with its blend, zoom, position and monochrome/colour setting.
+- **Overlay export:** choose Grid or Clear, select Export PNG, then Save PNG to download
+  the visible composition with its blend, zoom, position and monochrome/colour setting.
   Clear removes the canvas grid and background; the scanned paper stays part of
   each image. PNG output has a transparent canvas in Clear mode and is bounded
   to 4096 pixels on its longest edge using the locally displayed source scans.
